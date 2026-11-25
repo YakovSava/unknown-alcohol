@@ -1,136 +1,145 @@
 # Unknown Alcohol
 
-Нативный модуль для **Casualties: Unknown**, написанный на **FASM x86-64**
-и работающий через загрузчик **Unknown Polymorphism (UP)**.
+Native module for **Casualties: Unknown**, written in **FASM x86-64** and loaded
+through **Unknown Polymorphism (UP)**.
 
-> **Важно:** мод не глобальный. Он не добавляет новые жидкости, не меняет
-> `Liquids.Registry`, не переписывает ванильный `LiquidType` и не трогает
-> сохранения. Мод лишь перехватывает локальное событие питья и применяет
-> локальный коэффициент крепости спирта к конкретному телу. По сути это
-> демонстрация возможностей Unknown Polymorphism: нативный C ABI, хуки,
-> рефлексия, работа с managed-хэндлами и покадровый tick без единой строки C#.
+> **Important:** this mod is not global. It does not add new liquids, does not
+> modify `Liquids.Registry`, does not rewrite the vanilla `LiquidType`, and does
+> not touch saves. It only intercepts the local drink event and applies a local
+> alcohol-strength coefficient to the body that is drinking. In essence, it
+> demonstrates what Unknown Polymorphism can do: a native C ABI, hooks,
+> reflection, managed handle retention, and per-frame ticks without a single
+> line of C#.
 
-## Что именно меняется
+## What actually changes
 
-Ванильная жидкость `alcohol` остаётся собой: тот же id, то же название, та же
-иконка и те же ванильные эффекты. Мод не заменяет её глобально.
+The vanilla `alcohol` liquid stays exactly what it is: same id, same name, same
+icon, same vanilla effects. The mod does not replace it globally.
 
-В момент, когда тело пьёт жидкость с `liquidId == "alcohol"`, модуль считает
-выпитый объём спирта и применяет **локальный** параметр крепости:
+When a body drinks a liquid with `liquidId == "alcohol"`, the module measures
+the amount of alcohol consumed and applies a **local** strength coefficient:
 
 ```text
 points = ml * 0.95 * 0.25
 ```
 
-То есть для этого питья алкоголь считается 95% спиртом, а не напитком
-крепости 0.7, как в Unknown Drugs. Коэффициент живёт только внутри модуля и
-не сохраняется в игру.
+For that drink, alcohol is treated as 95% ethanol instead of the 0.7 strength
+used in Unknown Drugs. This coefficient lives only inside the module and is not
+saved into the game.
 
-## Что делает мод
+## Features
 
-- Ставит хук на `WaterContainerItem.Drink(Body, System.Single, System.String)`.
-- Через `CalculateDrain` и `stack` определяет, сколько именно `alcohol`
-  выпито, даже если в контейнере смешаны разные жидкости.
-- Ведёт отдельное состояние опьянения для каждого тела, до 8 тел.
-- Уровень ограничен 120 и спадает на `0.03` в секунду.
-- Повторяет пороги `Intoxication` из Unknown Drugs:
-  - от 8 — замедление через `stimulantMultiplier` и рост `happiness`;
-  - от 25 — шанс `Ragdoll()`;
-  - от 50 — шанс `vomiter.Vomit()` и падение `consciousness`;
-  - от 85 — падение `bloodOxygen`.
-- Дополнительно добавляет `sicknessAmount += ml * 0.05`, потому что спирт
-  жёстче обычного алкоголя.
-- Не отменяет оригинальный `onDrink`: ванильные эффекты остаются.
+- Hooks `WaterContainerItem.Drink(Body, System.Single, System.String)`.
+- Uses `CalculateDrain` and `stack` to determine how much `alcohol` was
+  actually consumed, even when the container holds a mixture of liquids.
+- Keeps a separate intoxication state per body, up to 8 bodies.
+- Caps the level at 120 and decays it by `0.03` per second.
+- Mirrors the `Intoxication` thresholds from Unknown Drugs:
+  - from 8: slowdown through `stimulantMultiplier` and `happiness` growth;
+  - from 25: chance to call `Ragdoll()`;
+  - from 50: chance to call `vomiter.Vomit()` and lose `consciousness`;
+  - from 85: lose `bloodOxygen`.
+- Adds `sicknessAmount += ml * 0.05`, because spirit hits harder than a normal
+  drink.
+- Does not skip the original `onDrink`: vanilla effects still apply.
 
-## Возможности Unknown Polymorphism, которые здесь используются
+## Unknown Polymorphism features used
 
-- Загрузка нативной DLL через `UP_GetModule`.
-- Экспорт модуля без единого импорта и без C runtime.
-- `host->hook` с сигнатурой `Body,System.Single,System.String`.
-- `host->invoke`, `host->get_field`, `host->set_field`.
-- `host->retain` / `host->release` для managed-хэндлов.
-- `tick` модуля для покадрового обновления состояния.
-- Ленивая установка хука: если тип игры ещё не загружен, попытка повторяется
-  раз в секунду.
+- Native DLL loading through `UP_GetModule`.
+- A module with no imports and no C runtime.
+- `host->hook` with the `Body,System.Single,System.String` signature.
+- `host->invoke`, `host->get_field`, and `host->set_field`.
+- `host->retain` and `host->release` for managed handles.
+- The module `tick` callback for per-frame state updates.
+- Lazy hook installation: if the game type is not loaded yet, the module
+  retries once per second.
 
-## Требования
+## Requirements
 
-- Casualties: Unknown (полная версия или демо), Unity 2022.3 Mono.
+- Casualties: Unknown (full game or Demo), Unity 2022.3 Mono.
 - BepInEx 5.4.23.x.
 - Unknown Polymorphism.
 - Windows x64.
-- FASM 1.73.30 для сборки из исходников.
+- FASM 1.73.30 to build from source.
 
-## Сборка
+## Build
 
 ```bat
 build.bat
 ```
 
-Или вручную:
+Or manually:
 
 ```bat
 set INCLUDE=C:\Program Files\fasmw17330\INCLUDE
 "C:\Program Files\fasmw17330\FASM.EXE" src\unknown_alcohol.asm build\UnknownAlcohol.dll
 ```
 
-Результат: `build\UnknownAlcohol.dll`.
+Output: `build\UnknownAlcohol.dll`.
 
-## Установка
+## Install
 
-Скопировать DLL в папку нативных модулей UP:
+Copy the DLL into the UP native module folder:
 
 ```text
-<Папка игры>\BepInEx\plugins\UnknownPolymorphism\mods\UnknownAlcohol\UnknownAlcohol.dll
+<Game folder>\BepInEx\plugins\UnknownPolymorphism\mods\UnknownAlcohol\UnknownAlcohol.dll
 ```
 
-Полностью перезапустить игру. UP не поддерживает горячую перезагрузку
-нативных DLL.
+Restart the game completely. UP does not support hot reloading of native DLLs.
 
-В логе должны появиться строки:
+The log should contain:
 
 ```text
 [UP][unknown-alcohol] Unknown Alcohol loaded: vanilla alcohol is ethanol
 [UP][unknown-alcohol] Unknown Alcohol: Drink hook installed
 ```
 
-## Настройка
+## Tuning
 
-Все параметры лежат в секции `.data` в `src/unknown_alcohol.asm`:
+All values live in the `.data` section of `src/unknown_alcohol.asm`:
 
-| Константа | Значение | Смысл |
+| Constant | Value | Meaning |
 |---|---:|---|
-| `c_strength` | `0.95` | локальная крепость спирта |
-| `c_points_per_ml` | `0.25` | очков опьянения на мл чистого спирта |
-| `c_extra_sickness` | `0.05` | дополнительная тошнота на мл |
-| `c_max_level` | `120.0` | максимум шкалы |
-| `c_decay` | `0.03` | спад в секунду |
-| `c_tipsy` | `8.0` | порог лёгкого опьянения |
-| `c_drunk` | `25.0` | порог сильного опьянения |
-| `c_sick` | `50.0` | порог тошноты |
-| `c_poison` | `85.0` | порог кислородного голодания |
+| `c_strength` | `0.95` | local strength of the spirit |
+| `c_points_per_ml` | `0.25` | intoxication points per ml of pure alcohol |
+| `c_extra_sickness` | `0.05` | extra sickness per ml |
+| `c_max_level` | `120.0` | maximum level |
+| `c_decay` | `0.03` | decay per second |
+| `c_tipsy` | `8.0` | tipsy threshold |
+| `c_drunk` | `25.0` | drunk threshold |
+| `c_sick` | `50.0` | sickness threshold |
+| `c_poison` | `85.0` | hypoxia threshold |
 
-После изменения констант DLL нужно пересобрать.
+Rebuild the DLL after changing any constant.
 
-## Ограничения
+## Limitations
 
-- Состояние хранится в нативной памяти и не сохраняется вместе с игрой.
-- Не добавлены визуальные искажения и пьяные реплики: в Unknown Drugs это
-  отдельные управляемые компоненты.
-- Мод не создаёт предметы, жидкости и рецепты.
-- Если установлен Unknown Drugs, его собственный `Intoxication` тоже
-  сработает: два эффекта сложатся.
+- State is stored in native memory and is not saved with the game.
+- Screen distortion and drunk phrases are not included; in Unknown Drugs they
+  are separate managed components.
+- The mod does not create items, liquids, or recipes.
+- If Unknown Drugs is installed, its own `Intoxication` also fires, so the two
+  effects stack.
 
-## Проверка
+## Verification
 
-Сборка FASM проходит. DLL загружается загрузчиком, `UP_GetModule` возвращает
-корректный дескриптор, таблица экспорта читается. Полный путь
-«хук → CalculateDrain → stack → liquidId → уровень → tick» проверен на
-тестовом UP-хосте:
+The FASM build passes. The DLL loads through the loader, `UP_GetModule` returns
+a valid descriptor, and the export table is readable. The full path
+`hook -> CalculateDrain -> stack -> liquidId -> level -> tick` was tested with a
+fake UP host:
 
-- 100 мл: уровень 23.75, `stimulantMultiplier = -0.095`, рост `happiness`;
-- 1000 мл: уровень упирается в 120, срабатывают `Ragdoll`/`Vomit`,
-  `consciousness` и `bloodOxygen` падают до 0;
-- распад до нуля освобождает удержанный handle.
+- 100 ml: level 23.75, `stimulantMultiplier = -0.095`, `happiness` grows;
+- 1000 ml: level caps at 120, `Ragdoll` and `Vomit` fire, `consciousness` and
+  `bloodOxygen` drop to 0;
+- decay to zero releases the retained handle.
 
-В реальной игре мод ещё не запускался.
+The mod has not been launched in the real game yet.
+
+## Also try
+
+**Unknown Drugs** — the original mod that this module takes its alcohol and
+intoxication model from. It adds 39 liquids with tolerance, addiction, and
+withdrawal, and includes its own vanilla-alcohol hook.
+
+- Nexus Mods: https://www.nexusmods.com/scavprototype/mods/1075
+- GitHub: https://github.com/YakovSava/unknown-drugs
